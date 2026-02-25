@@ -76,18 +76,14 @@ def main():
 
   criterion = nn.CrossEntropyLoss()
   criterion = criterion.cuda()
-  optimizer = torch.optim.SGD(
+  optimizer = torch.optim.SGD( 
       model.parameters(),
       args.learning_rate,
       momentum=args.momentum,
       weight_decay=args.weight_decay
       )
-
-  # new code for elpv
   train_queue = train_loader
   valid_queue = test_loader  
-  # new code for elpv
-    
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
 
   for epoch in range(args.epochs):
