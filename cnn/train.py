@@ -191,7 +191,8 @@ def main():
       weight_decay=args.weight_decay
       )
 
-  """train_transform, valid_transform = utils._data_transforms_cifar10(args)
+  """
+"""train_transform, valid_transform = utils._data_transforms_cifar10(args)
   train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
   valid_data = dset.CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
 
@@ -200,7 +201,7 @@ def main():
 
   valid_queue = torch.utils.data.DataLoader(
       valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)"""
-
+"""
   # new code for elpv
   train_queue = train_loader
   valid_queue = test_loader  
