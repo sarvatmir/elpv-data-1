@@ -19,16 +19,21 @@ class ELPVDataset(Dataset):
         self.images = images
         self.labels = labels
         self.transform = transform
-    
-    def __len__(self):
-        return len(self.images)
-    
+
+        self.label_map = {
+            "poly": 0,
+            "mono": 1
+            # add more classes if needed
+        }
+
     def __getitem__(self, idx):
-        img = self.images[idx]
-        img = Image.fromarray(img)
-        label = int(self.labels[idx])
+        img = Image.open(self.images[idx]).convert("RGB")
         if self.transform:
             img = self.transform(img)
+
+        label_str = self.labels[idx]
+        label = self.label_map[label_str]  # 🔥 FIXED
+
         return img, label
 
 # Make the dataset
