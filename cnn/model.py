@@ -1,5 +1,126 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from operations import OPS, ReLUConvBN, FactorizedReduce, DropPath
+
+# DARTS cell
+class Cell(nn.Module):
+    def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev):
+        super(Cell, self).__init__()
+        self.reduction = reduction
+        self.multiplier = multiplier
+        if reduction_prev:
+            self.preprocess0 = FactorizedReduce(C_prev_prev, C, affine=True)
+        else:
+            self.preprocess0 = ReLUConvBN(C_prev_prev, C, 1, 1, 0, affine=True)
+        self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0, affine=True)
+
+        self._steps = steps
+        self._ops = nn.ModuleList()
+        self._bns = nn.ModuleList()
+        self._indices = []
+        for i in range(self._steps):
+            for j in range(2 + i):
+                stride = 2 if reduction and j < 2 else 1
+                op = OPS['sep_conv_3x3'](C, C, stride, True)
+                self._ops.append(op)
+                self._indices.append(j)
+
+    def forward(self, s0, s1, drop_path_prob=0.0):
+        s0 = self.preprocess0(s0)
+        s1 = self.preprocess1(s1)
+        states = [s0, s1]
+        offset = 0
+        for i in range(self._steps):
+            s = 0
+            for j, h in zip(self._indices[offset:offset+i+2], states):
+                s += self._ops[offset](h)
+                offset += 1
+            states.append(s)
+        return torch.cat(states[-self.multiplier:], dim=1)
+
+# Auxiliary Head for intermediate supervision
+class AuxiliaryHead(nn.Module):
+    def __init__(self, C, num_classes, input_size):
+        super(AuxiliaryHead, self).__init__()
+        self.input_size = input_size
+        self.features = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.AvgPool2d(5, stride=3, padding=0, ceil_mode=True),
+            nn.Conv2d(C, 128, 1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True)
+        )
+        # Compute the flattened feature size dynamically
+        with torch.no_grad():
+            dummy = torch.zeros(1, C, input_size, input_size)
+            out = self.features(dummy)
+            self.num_features = out.view(1, -1).size(1)
+
+        self.classifier = nn.Linear(self.num_features, num_classes)
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
+
+# Full DARTS Network
+class Network(nn.Module):
+    def __init__(self, C, num_classes, layers, auxiliary, input_size, steps=4, multiplier=4):
+        super(Network, self).__init__()
+        self._layers = layers
+        self._auxiliary = auxiliary
+        self.C = C
+        self.input_size = input_size
+        self.steps = steps
+        self.multiplier = multiplier
+
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, C, 3, padding=1, bias=False),
+            nn.BatchNorm2d(C)
+        )
+
+        C_prev_prev, C_prev, C_curr = C, C, C
+        self.cells = nn.ModuleList()
+        reduction_prev = False
+        for i in range(layers):
+            if i in [layers // 3, 2 * layers // 3]:
+                C_curr *= 2
+                reduction = True
+            else:
+                reduction = False
+            cell = Cell(steps, multiplier, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+            reduction_prev = reduction
+            self.cells.append(cell)
+            C_prev_prev, C_prev = C_prev, multiplier * C_curr
+
+            if i == 2 * layers // 3:
+                aux_C = C_prev
+        if auxiliary:
+            self.auxiliary_head = AuxiliaryHead(aux_C, num_classes, input_size // 4)
+        else:
+            self.auxiliary_head = None
+
+        self.global_pooling = nn.AdaptiveAvgPool2d(1)
+        self.classifier = nn.Linear(C_prev, num_classes)
+
+    def forward(self, x):
+        s0 = s1 = self.stem(x)
+        for i, cell in enumerate(self.cells):
+            s0, s1 = s1, cell(s0, s1)
+            if self._auxiliary and self.training and i == 2 * self._layers // 3:
+                aux_out = self.auxiliary_head(s1)
+        out = self.global_pooling(s1)
+        out = out.view(out.size(0), -1)
+        if self._auxiliary and self.training:
+            return self.classifier(out), aux_out
+        else:
+            return self.classifier(out), None
+
+
+"""import torch
+import torch.nn as nn
 from operations import *
 from torch.autograd import Variable
 from utils import drop_path
