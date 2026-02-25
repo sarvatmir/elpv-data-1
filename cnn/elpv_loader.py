@@ -16,7 +16,7 @@ images, proba, types = load_dataset()
 # Transforms for DARTS (32×32 RGB)
 # -------------------------------
 transform = T.Compose([
-    T.Resize((32, 32)),
+    T.Resize((224, 224)),
     T.ToTensor(),  # PIL → Tensor
 ])
 
