@@ -23,26 +23,39 @@ class ELPVDataset(Dataset):
         self.label_map = {
             "poly": 0,
             "mono": 1
-            # add more classes if needed
         }
 
     def __getitem__(self, idx):
-        img = Image.open(self.images[idx]).convert("RGB")
+        img_path = self.images[idx]
+
+        # open image
+        img = Image.open(img_path).convert("RGB")
+
+        # apply transforms
         if self.transform:
             img = self.transform(img)
 
-        label_str = self.labels[idx]
-        label = self.label_map[label_str]  # 🔥 FIXED
+        # FIX 1: convert numpy string → python string
+        label_str = str(self.labels[idx])
+
+        # FIX 2: ensure clean mapping
+        if label_str not in self.label_map:
+            raise ValueError(f"Unknown label: {label_str}")
+
+        label = self.label_map[label_str]
 
         return img, label
 
-# Make the dataset
+    def __len__(self):
+        return len(self.images)
+
+# build dataset
 dataset = ELPVDataset(images, types, transform)
 
-# Split
+# split
 train_size = int(0.8 * len(dataset))
-test_size  = len(dataset) - train_size
+test_size = len(dataset) - train_size
 train_set, test_set = torch.utils.data.random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(train_set, batch_size=64, shuffle=True)
-test_loader  = DataLoader(test_set, batch_size=64)
+test_loader = DataLoader(test_set, batch_size=64, shuffle=False)
