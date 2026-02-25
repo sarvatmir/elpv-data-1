@@ -15,7 +15,8 @@ import torch.backends.cudnn as cudnn
 
 from torch.autograd import Variable
 from model import NetworkCIFAR as Network
-from cnn.elpv_loader import train_loader, test_loader
+#from cnn.elpv_loader import train_loader, test_loader
+from elpv_loader import train_loader, test_loader
 
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--data', type=str, default='../data', help='location of the data corpus')
