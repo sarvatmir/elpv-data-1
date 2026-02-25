@@ -15,7 +15,7 @@ import torch.backends.cudnn as cudnn
 
 from torch.autograd import Variable
 from model import NetworkCIFAR as Network
-
+from cnn.elpv_loader import train_loader, test_loader
 
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--data', type=str, default='../data', help='location of the data corpus')
@@ -82,7 +82,7 @@ def main():
       weight_decay=args.weight_decay
       )
 
-  train_transform, valid_transform = utils._data_transforms_cifar10(args)
+  """train_transform, valid_transform = utils._data_transforms_cifar10(args)
   train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
   valid_data = dset.CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
 
@@ -90,8 +90,13 @@ def main():
       train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=2)
 
   valid_queue = torch.utils.data.DataLoader(
-      valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
+      valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)"""
 
+  # new code for elpv
+  train_queue = train_loader
+  valid_queue = test_loader  
+  # new code for elpv
+    
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
 
   for epoch in range(args.epochs):
