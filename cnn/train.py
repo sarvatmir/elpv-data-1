@@ -1,4 +1,112 @@
-import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+from model import Network  # your fixed model.py with auxiliary head
+
+# ---------------------------
+# GPU Setup
+# ---------------------------
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+torch.backends.cudnn.benchmark = True  # optimize for your image size
+torch.cuda.empty_cache()
+
+# ---------------------------
+# Hyperparameters
+# ---------------------------
+batch_size = 8           # small batch to fit T4
+init_channels = 16       # smaller channel count
+layers = 8               # smaller depth
+num_classes = 10
+learning_rate = 0.01
+momentum = 0.9
+weight_decay = 3e-4
+epochs = 40
+auxiliary = True         # include auxiliary head
+
+# ---------------------------
+# Data Transforms
+# ---------------------------
+image_size = 128  # change to 224 if memory allows
+transform_train = transforms.Compose([
+    transforms.Resize((image_size, image_size)),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+])
+
+transform_valid = transforms.Compose([
+    transforms.Resize((image_size, image_size)),
+    transforms.ToTensor(),
+])
+
+train_dataset = datasets.ImageFolder('../data/train', transform=transform_train)
+valid_dataset = datasets.ImageFolder('../data/valid', transform=transform_valid)
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
+valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+
+# ---------------------------
+# Model, Criterion, Optimizer
+# ---------------------------
+model = Network(init_channels, num_classes, layers, auxiliary).to(device)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+# ---------------------------
+# Training Loop
+# ---------------------------
+for epoch in range(epochs):
+    model.train()
+    train_loss, correct, total = 0, 0, 0
+    for inputs, targets in train_loader:
+        inputs, targets = inputs.to(device), targets.to(device)
+        optimizer.zero_grad()
+        outputs, aux_outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        if auxiliary:
+            loss += 0.4 * criterion(aux_outputs, targets)
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 5)  # gradient clipping
+        optimizer.step()
+
+        train_loss += loss.item() * inputs.size(0)
+        _, predicted = outputs.max(1)
+        total += targets.size(0)
+        correct += predicted.eq(targets).sum().item()
+
+    scheduler.step()  # step after optimizer
+
+    train_acc = 100. * correct / total
+    train_loss /= total
+    print(f'Epoch [{epoch+1}/{epochs}] Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%')
+
+    # ---------------------------
+    # Validation
+    # ---------------------------
+    model.eval()
+    correct, total = 0, 0
+    with torch.no_grad():
+        for inputs, targets in valid_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs, _ = model(inputs)
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+    valid_acc = 100. * correct / total
+    print(f'Epoch [{epoch+1}/{epochs}] Valid Acc: {valid_acc:.2f}%')
+
+# ---------------------------
+# Save Model
+# ---------------------------
+torch.save(model.state_dict(), 'darts_model.pth')
+print("Training finished and model saved!")
+
+
+
+# Actual train
+"""import os
 import sys
 import time
 import glob
@@ -168,7 +276,7 @@ def infer(valid_queue, model, criterion):
     if step % args.report_freq == 0:
       logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
 
-  return top1.avg, objs.avg
+  return top1.avg, objs.avg"""
 
 
 if __name__ == '__main__':
