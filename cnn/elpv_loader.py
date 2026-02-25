@@ -2,57 +2,70 @@ import torch
 import torchvision.transforms as T
 from torch.utils.data import Dataset, DataLoader
 from elpv_dataset.utils import load_dataset
-import numpy as np
 from PIL import Image
+import numpy as np
 
-# Load dataset
+
+# -------------------------------
+# Load Dataset (Numpy arrays)
+# -------------------------------
 images, proba, types = load_dataset()
 
+
+# -------------------------------
+# Transforms for DARTS (32×32 RGB)
+# -------------------------------
 transform = T.Compose([
     T.Resize((32, 32)),
-    T.Grayscale(num_output_channels=3),
-    T.ToTensor(),
+    T.ToTensor(),  # PIL → Tensor
 ])
 
+
+# -------------------------------
+# Custom Dataset
+# -------------------------------
 class ELPVDataset(Dataset):
     def __init__(self, images, labels, transform=None):
-        self.images = images
-        self.labels = labels
+
+        self.images = images            # numpy arrays (H,W or H,W,3)
+        self.labels = labels            # string labels "mono"/"poly"
         self.transform = transform
 
+        # label mapping for DARTS
         self.label_map = {
             "poly": 0,
             "mono": 1
         }
 
+    def __len__(self):
+        return len(self.images)
+
     def __getitem__(self, idx):
-        img_path = self.images[idx]
 
-        # open image
-        img = Image.open(img_path).convert("RGB")
+        # numpy array → ensure 3 channels
+        img_arr = self.images[idx]
 
-        # apply transforms
+        # Some images are grayscale (H×W), convert to (H×W×3)
+        if img_arr.ndim == 2:
+            img_arr = np.stack([img_arr]*3, axis=-1)
+
+        img = Image.fromarray(img_arr.astype(np.uint8))
+
         if self.transform:
             img = self.transform(img)
 
-        # FIX 1: convert numpy string → python string
-        label_str = str(self.labels[idx])
-
-        # FIX 2: ensure clean mapping
-        if label_str not in self.label_map:
-            raise ValueError(f"Unknown label: {label_str}")
-
+        # Convert label string → int
+        label_str = self.labels[idx]
         label = self.label_map[label_str]
 
         return img, label
 
-    def __len__(self):
-        return len(self.images)
 
-# build dataset
+# -------------------------------
+# Build Dataloaders
+# -------------------------------
 dataset = ELPVDataset(images, types, transform)
 
-# split
 train_size = int(0.8 * len(dataset))
 test_size = len(dataset) - train_size
 train_set, test_set = torch.utils.data.random_split(dataset, [train_size, test_size])
