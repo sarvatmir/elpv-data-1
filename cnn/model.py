@@ -184,7 +184,7 @@ class Cell(nn.Module):
 class AuxiliaryHeadCIFAR(nn.Module):
 
   def __init__(self, C, num_classes):
-    """assuming input size 8x8"""
+    #assuming input size 8x8
     super(AuxiliaryHeadCIFAR, self).__init__()
     self.features = nn.Sequential(
       nn.ReLU(inplace=True),
@@ -207,7 +207,7 @@ class AuxiliaryHeadCIFAR(nn.Module):
 class AuxiliaryHeadImageNet(nn.Module):
 
   def __init__(self, C, num_classes):
-    """assuming input size 14x14"""
+    #assuming input size 14x14
     super(AuxiliaryHeadImageNet, self).__init__()
     self.features = nn.Sequential(
       nn.ReLU(inplace=True),
